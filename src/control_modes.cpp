@@ -52,6 +52,7 @@ namespace joint_cmd_mux {
         );
     }
 
+    // TODO: Handle transition errors
     void transition(const ControlMode& from, const ControlMode& to, UnitreeInterface& unitree_interface) {
         if (!unitree_interface.is_initialized()) {
             // Log error but don't throw - let caller handle it
