@@ -1,0 +1,9 @@
+uint8 IDLE=0
+uint8 HIGH_LEVEL=1
+uint8 LOW_LEVEL=2
+uint8 ESTOP=3
+
+uint8 requested_mode
+---
+bool success
+string message
