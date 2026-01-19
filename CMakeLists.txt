@@ -14,6 +14,33 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
+############ IK ############
+find_package(Eigen3 REQUIRED)
+find_package(pinocchio REQUIRED)
+find_package(casadi REQUIRED)
+
+include_directories(
+    ${EIGEN3_INCLUDE_DIR}
+    ${pinocchio_INCLUDE_DIRS}
+    ${CASADI_INCLUDE_DIR}
+    # ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Source files
+set(IK_SOURCES
+    src/arm/weighted_moving_filter.cpp
+    src/arm/robot_arm_ik.cpp
+    src/arm/robot_arm_ik_g1_23dof.cpp
+)
+
+# Headers
+set(IK_HEADERS
+    src/arm/include/weighted_moving_filter.h
+    src/arm/include/robot_arm_ik.h
+    src/arm/include/robot_arm_ik_g1_23dof.h
+)
+########################
+
 # unitree_sdk2
 add_subdirectory(third_party/unitree_sdk2)
 
@@ -44,6 +71,8 @@ add_library(unitree_interface_lib
     src/control_modes.cpp
     src/unitree_sdk_wrapper.cpp
     src/mode_transitions.cpp
+    ${IK_SOURCES}
+    ${IK_HEADERS}
 )
 
 target_include_directories(unitree_interface_lib
@@ -61,6 +90,10 @@ target_include_directories(unitree_interface_lib
 target_link_libraries(unitree_interface_lib
   "${typesupport_target}"
   unitree_sdk2
+    ${EIGEN3_LIBRARIES}
+    pinocchio::pinocchio
+    casadi
+
 )
 
 ament_target_dependencies(unitree_interface_lib
