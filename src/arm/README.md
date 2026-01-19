@@ -26,6 +26,24 @@ auto [q, tau] = arm_ik.solve_ik(
 );
 ```
 
+### Required Libraries
+
+1. **Eigen3** (≥ 3.3)
+   ```bash
+   sudo apt-get install libeigen3-dev
+   ```
+
+2. **Pinocchio** (≥ 2.6)
+   ```bash
+   sudo apt-get install robotpkg-pinocchio
+   # OR build from source: https://github.com/stack-of-tasks/pinocchio
+   ```
+
+3. **CasADi** (≥ 3.5)
+   ```bash
+   # Download from https://web.casadi.org/get/
+   # Or install via package manager if available
+   ```
 
 ## Some helper functions
 ```cpp
