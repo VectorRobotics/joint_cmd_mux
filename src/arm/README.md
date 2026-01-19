@@ -2,18 +2,28 @@
 
 To use IK, do the following in the package
 ```cpp
-#include "arm/include/robot_arm_ik_g1_23dof.h"
+#include "robot_arm_ik_g1_23dof.h"
 
+// Create robot configuration
+RobotConfig config;
+config.asset_file = "../assets/g1/g1_body29_hand14.urdf";
+config.asset_root = "../assets/g1/";
 
-const RobotConfig* robot_config = new RobotConfig("","");
-G1_29_ArmIK_NoWrists arm_ik(robot_config=robot_config);
+// Create IK solver with collision detection
+G1_29_ArmIK_NoWrists arm_ik(false, false, &config);
 
-Eigen::Quaterniond quat_identity(1, 0, 0, 0);
-Eigen::Matrix4d L_tf_target = create_se3(quat_identity, Eigen::Vector3d(0.25, 0.25, 0.1));
-Eigen::Matrix4d R_tf_target = create_se3(quat_identity, Eigen::Vector3d(0.25, -0.25, 0.1));
-    
-// Solving IK
-auto [sol_q, sol_tauff] = arm_ik.solve_ik(L_tf_target, R_tf_target);
+// Define external forces (6D wrenches)
+Eigen::VectorXd ext_force_left = Eigen::VectorXd::Zero(6);
+Eigen::VectorXd ext_force_right = Eigen::VectorXd::Zero(6);
+ext_force_left(2) = 5.0;  // 5N downward force
+
+// Solve IK with collision checking
+auto [q, tau] = arm_ik.solve_ik(
+    left_target, right_target,
+    nullptr, nullptr,  // current q, dq
+    &ext_force_left, &ext_force_right,
+    true  // enable collision checking
+);
 ```
 
 
