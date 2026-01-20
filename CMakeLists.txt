@@ -17,27 +17,31 @@ find_package(rosidl_default_generators REQUIRED)
 ############ IK ############
 find_package(Eigen3 REQUIRED)
 find_package(pinocchio REQUIRED)
-find_package(casadi REQUIRED)
+
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+set(CASADI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi")
+set(CASADI_INCLUDE_DIRS "${CASADI_DIR}/include")
 
 include_directories(
     ${EIGEN3_INCLUDE_DIR}
     ${pinocchio_INCLUDE_DIRS}
-    ${CASADI_INCLUDE_DIR}
-    # ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CASADI_INCLUDE_DIRS}
 )
+
+link_directories(${CASADI_DIR})
 
 # Source files
 set(IK_SOURCES
-    src/arm/weighted_moving_filter.cpp
-    src/arm/robot_arm_ik.cpp
-    src/arm/robot_arm_ik_g1_23dof.cpp
+    src/arm_ik/weighted_moving_filter.cpp
+    src/arm_ik/robot_arm_ik.cpp
+    src/arm_ik/robot_arm_ik_g1_23dof.cpp
 )
 
 # Headers
 set(IK_HEADERS
-    src/arm/include/weighted_moving_filter.h
-    src/arm/include/robot_arm_ik.h
-    src/arm/include/robot_arm_ik_g1_23dof.h
+    src/arm_ik/include/weighted_moving_filter.h
+    src/arm_ik/include/robot_arm_ik.h
+    src/arm_ik/include/robot_arm_ik_g1_23dof.h
 )
 ########################
 
@@ -66,7 +70,7 @@ rosidl_get_typesupport_target(typesupport_target
 
 # Create the library
 add_library(unitree_interface_lib
-  STATIC
+  SHARED
     src/unitree_interface.cpp
     src/control_modes.cpp
     src/unitree_sdk_wrapper.cpp
@@ -79,6 +83,7 @@ target_include_directories(unitree_interface_lib
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    ${CASADI_INCLUDE_DIRS}
 )
 
 # Not decreasing compile time for some reason
@@ -90,10 +95,9 @@ target_include_directories(unitree_interface_lib
 target_link_libraries(unitree_interface_lib
   "${typesupport_target}"
   unitree_sdk2
-    ${EIGEN3_LIBRARIES}
-    pinocchio::pinocchio
-    casadi
-
+  ${EIGEN3_LIBRARIES}
+  pinocchio::pinocchio
+  casadi
 )
 
 ament_target_dependencies(unitree_interface_lib
@@ -110,9 +114,16 @@ target_link_libraries(unitree_interface_node
   unitree_interface_lib
 )
 
+# set_target_properties(unitree_interface_node PROPERTIES 
+#     INSTALL_RPATH "$ORIGIN/../lib"
+# )
+
 install(TARGETS unitree_interface_node
   DESTINATION lib/unitree_interface
 )
+
+# install(FILES ${CASADI_LIBS}
+#   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch
   DESTINATION share/unitree_interface
@@ -136,6 +147,14 @@ if(BUILD_TESTING)
   )
 
   target_link_libraries(test_unitree_interface
+    unitree_interface_lib
+  )
+
+  ament_add_gtest(test_ik
+    test/test_ik.cpp
+  )
+
+  target_link_libraries(test_ik
     unitree_interface_lib
   )
 endif()
