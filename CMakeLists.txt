@@ -17,7 +17,7 @@ find_package(rosidl_default_generators REQUIRED)
 # unitree_sdk2
 add_subdirectory(third_party/unitree_sdk2)
 
-# Generate service definitions
+# Generate interface definitions
 # set(msg_files
 #   ""
 # )
@@ -66,6 +66,12 @@ target_link_libraries(unitree_interface_lib
 ament_target_dependencies(unitree_interface_lib
   rclcpp
   geometry_msgs
+)
+
+# A good idea (at least, during development)
+target_compile_options(unitree_interface_lib
+  PRIVATE
+    -Werror
 )
 
 # Create the executable

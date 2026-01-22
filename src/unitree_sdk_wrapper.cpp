@@ -3,8 +3,8 @@
 #include "unitree_interface/control_modes.hpp"
 #include "unitree_interface/mode_transitions.hpp"
 
-#include <unitree/robot/channel/channel_factory.hpp>
 #include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp> // Seems misleading, but is actually correct
+#include <unitree/robot/channel/channel_factory.hpp>
 #include <unitree/robot/g1/loco/g1_loco_client.hpp>
 
 #include <rclcpp/logging.hpp>
@@ -17,22 +17,22 @@ namespace unitree_interface {
         const rclcpp::Node::SharedPtr& node,
         std::string network_interface,
         rclcpp::Logger logger
-    ) : network_interface_(network_interface),
-        logger_(logger),
+    ) : network_interface_(std::move(network_interface)),
+        logger_(std::move(logger)),
         initialized_(false) {
         // TODO: Attach pubs/subs for unitree stuff to the node
     }
 
-    UnitreeSDKWrapper::UnitreeSDKWrapper(UnitreeSDKWrapper&& other)
+    UnitreeSDKWrapper::UnitreeSDKWrapper(UnitreeSDKWrapper&& other) noexcept
         : network_interface_(std::move(other.network_interface_)),
-          logger_(other.logger_),
+          logger_(std::move(other.logger_)),
           initialized_(other.initialized_),
           msc_(std::move(other.msc_)),
           loco_client_(std::move(other.loco_client_)) {
         other.initialized_ = false;
     }
 
-    UnitreeSDKWrapper& UnitreeSDKWrapper::operator=(UnitreeSDKWrapper&& other) {
+    UnitreeSDKWrapper& UnitreeSDKWrapper::operator=(UnitreeSDKWrapper&& other) noexcept {
         if (this != &other) {
             network_interface_ = std::move(other.network_interface_);
             logger_ = other.logger_;
@@ -83,11 +83,16 @@ namespace unitree_interface {
     std::pair<std::string, std::string> UnitreeSDKWrapper::get_current_mode() const {
         if (!initialized_ || !msc_) {
             RCLCPP_ERROR(logger_, "UnitreeInterface not initialized");
-            return {"", ""};
+            return {};
         }
 
         std::string form, name;
-        msc_->CheckMode(form, name);
+        const int32_t ret = msc_->CheckMode(form, name);
+
+        if (ret != 0) {
+            RCLCPP_WARN(logger_, "CheckMode failed with error code: %d", ret);
+            return {};
+        }
 
         return {form, name};
     }
@@ -98,22 +103,7 @@ namespace unitree_interface {
         return !name.empty();
     }
 
-    IdleMode UnitreeSDKWrapper::create_idle_mode() const {
-        return IdleMode();
-    }
-
-    HighLevelMode UnitreeSDKWrapper::create_high_level_mode() const {
-        return HighLevelMode();
-    }
-
-    LowLevelMode UnitreeSDKWrapper::create_low_level_mode() const {
-        return LowLevelMode();
-    }
-
-    EmergencyStop UnitreeSDKWrapper::create_emergency_stop_mode() const {
-        return EmergencyStop();
-    }
-
+    // ========== Internal capabilities ==========
     bool UnitreeSDKWrapper::release_mode() {
         if (!initialized_ || !msc_) {
             RCLCPP_ERROR(logger_, "UnitreeInterface not initialized");
@@ -127,15 +117,15 @@ namespace unitree_interface {
             RCLCPP_INFO(logger_, "No active motion control mode - already released");
             return true;
         }
-    
+
         RCLCPP_INFO(logger_, "Attempting to release mode: %s (form: %s)", name.c_str(), form.c_str());
         const int32_t ret = msc_->ReleaseMode();
-        
+
         if (ret == 0) {
             RCLCPP_INFO(logger_, "ReleaseMode succeeded");
             return true;
         }
-        
+
         RCLCPP_WARN(logger_, "ReleaseMode failed with error code: %d", ret);
         return false;
     }
@@ -157,10 +147,10 @@ namespace unitree_interface {
         if (ret == 0) {
             RCLCPP_INFO(logger_, "Successfully selected mode: %s", mode_name.c_str());
             return true;
-        } else {
-            RCLCPP_ERROR(logger_, "SelectMode failed with error code: %d", ret);
-            return false;
         }
+ 
+        RCLCPP_ERROR(logger_, "SelectMode failed with error code: %d", ret);
+        return false;
     }
 
     bool UnitreeSDKWrapper::damp() {
@@ -175,45 +165,49 @@ namespace unitree_interface {
         if (ret == 0) {
             RCLCPP_INFO(logger_, "Damp mode activated");
             return true;
-        } else {
-            RCLCPP_WARN(logger_, "Damp failed with error code: %d", ret);
-            return false;
         }
+
+        RCLCPP_WARN(logger_, "Damp failed with error code: %d", ret);
+        return false;
     }
 
-    bool UnitreeSDKWrapper::emergency_stop() {
-        if (!initialized_) {
-            RCLCPP_ERROR(logger_, "UnitreeInterface not initialized");
-            return false;
-        }
+    // ========== High-level capabilities ==========
+    bool UnitreeSDKWrapper::send_velocity_command_impl(const geometry_msgs::msg::Twist& message) {
+        // TODO: Implement this
+    }
 
-        RCLCPP_WARN(logger_, "Emergency stop activated");
+    bool UnitreeSDKWrapper::send_speech_command_impl(const std::string& message) {
+        // TODO: Implement this
+    }
 
-        bool success = true;
+    // TODO: Add other high-level capabilities
 
-        if (msc_) {
-            // Don't wait for retries in emergency stop
-            std::string form, name;
-            msc_->CheckMode(form, name);
-            if (!name.empty()) {
-                const int32_t ret = msc_->ReleaseMode();
-                if (ret != 0) {
-                    RCLCPP_ERROR(logger_, "Emergency stop: ReleaseMode failed with code: %d", ret);
-                    success = false;
-                }
-            }
-        }
+    // ========== Low-level capabilities ==========
+    bool UnitreeSDKWrapper::set_joint_motor_gains_impl() {
+        // TODO: Implement this
+    }
 
-        // Then, try to damp
-        if (loco_client_) {
-            const int32_t ret = loco_client_->Damp();
-            if (ret != 0) {
-                RCLCPP_ERROR(logger_, "Emergency stop: Damp failed with code: %d", ret);
-                success = false;
-            }
-        }
+    bool UnitreeSDKWrapper::send_joint_control_command_impl() {
+        // TODO: Implement this
+    }
 
-        return success;
+    // TODO: Add other low-level capabilities
+
+    // ========== Mode creation ==========
+    IdleMode UnitreeSDKWrapper::create_idle_mode() const {
+        return {};
+    }
+
+    HighLevelMode UnitreeSDKWrapper::create_high_level_mode() const {
+        return {};
+    }
+
+    LowLevelMode UnitreeSDKWrapper::create_low_level_mode() const {
+        return {};
+    }
+
+    EmergencyMode UnitreeSDKWrapper::create_emergency_mode() const {
+        return {};
     }
 
 } // namespace unitree_interface

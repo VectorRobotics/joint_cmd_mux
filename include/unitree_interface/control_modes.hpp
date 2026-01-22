@@ -1,6 +1,8 @@
 #ifndef VECTOR_CONTROL_MODES_HPP
 #define VECTOR_CONTROL_MODES_HPP
 
+#include <geometry_msgs/msg/twist.hpp>
+
 #include <string>
 #include <variant>
 
@@ -8,9 +10,11 @@ namespace unitree_interface {
 
     class UnitreeSDKWrapper;
 
+    // ========== Control modes ==========
     class IdleMode {
     public:
-        std::string name() const { return "Idle"; }
+        [[nodiscard]]
+        static constexpr const char* name() { return "Idle"; }
 
     private:
         friend class UnitreeSDKWrapper;
@@ -20,9 +24,18 @@ namespace unitree_interface {
 
     class HighLevelMode {
     public:
-        std::string name() const { return "HighLevel"; }
+        [[nodiscard]]
+        static constexpr const char* name() { return "HighLevel"; }
 
-        // TODO: Add high-level control capabilities
+        void send_velocity_command(
+            UnitreeSDKWrapper& sdk_wrapper,
+            const geometry_msgs::msg::Twist& message
+        );
+
+        void send_speech_command(
+            UnitreeSDKWrapper& sdk_wrapper,
+            const std::string& message
+        );
 
     private:
         friend class UnitreeSDKWrapper;
@@ -32,9 +45,16 @@ namespace unitree_interface {
 
     class LowLevelMode {
     public:
-        std::string name() const { return "LowLevel"; }
+        [[nodiscard]]
+        static constexpr const char* name() { return "LowLevel"; }
 
-        // TODO: Add low-level control capabilities
+        void set_joint_motor_gains(
+            UnitreeSDKWrapper& sdk_wrapper
+        );
+
+        void send_joint_control_command(
+            UnitreeSDKWrapper& sdk_wrapper
+        );
 
     private:
         friend class UnitreeSDKWrapper;
@@ -42,16 +62,17 @@ namespace unitree_interface {
         LowLevelMode() = default;
     };
 
-    class EmergencyStop {
+    class EmergencyMode {
     public:
-        std::string name() const { return "EmergencyStop"; }
+        [[nodiscard]]
+        static constexpr const char* name() { return "EmergencyStop"; }
 
-        bool execute(UnitreeSDKWrapper& sdk_wrapper);
+        bool damp(UnitreeSDKWrapper& sdk_wrapper);
 
     private:
         friend class UnitreeSDKWrapper;
 
-        EmergencyStop() = default;
+        EmergencyMode() = default;
     };
 
     // clang-format off
@@ -60,16 +81,28 @@ namespace unitree_interface {
         IdleMode,
         HighLevelMode,
         LowLevelMode,
-        EmergencyStop
+        EmergencyMode
     >;
     // clang-format on
 
+    // ========== Control mode traits ==========
+    template <typename T>
+    struct ControlModeTraits {
+        static constexpr const char* name() { return T::name(); }
+    };
+
+    template <>
+    struct ControlModeTraits<std::monostate> {
+        static constexpr const char* name() { return "std::monostate"; }
+    };
+
+    // ========== Helper functions ==========
     bool can_transition(const ControlMode& from, const ControlMode& to);
 
     ControlMode execute_transition(
         const ControlMode& from,
         const ControlMode& to,
-        UnitreeSDKWrapper& unitree_interface
+        UnitreeSDKWrapper& sdk_wrapper
     );
 
 } // namespace unitree_interface

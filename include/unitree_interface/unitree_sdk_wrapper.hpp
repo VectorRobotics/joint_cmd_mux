@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-// Forward declarations
+// ========== Forward declarations ==========
 namespace unitree::robot::b2 {
     class MotionSwitcherClient;
 }
@@ -20,18 +20,15 @@ namespace unitree::robot::g1 {
 
 namespace unitree_interface {
 
-    // Some more forward declarations
+    // ========== I swear they exist ==========
     class IdleMode;
     class HighLevelMode;
     class LowLevelMode;
-    class EmergencyStop;
+    class EmergencyMode;
     template <typename From, typename To> struct Transition;
 
     class UnitreeSDKWrapper {
     public:
-        using MotionSwitcherClientPtr = std::unique_ptr<unitree::robot::b2::MotionSwitcherClient>;
-        using LocoClientPtr = std::unique_ptr<unitree::robot::g1::LocoClient>;
-
         explicit UnitreeSDKWrapper(
             const rclcpp::Node::SharedPtr& node,
             std::string network_interface,
@@ -43,64 +40,73 @@ namespace unitree_interface {
         UnitreeSDKWrapper& operator=(const UnitreeSDKWrapper&) = delete;
 
         // Can move
-        UnitreeSDKWrapper(UnitreeSDKWrapper&&);
-        UnitreeSDKWrapper& operator=(UnitreeSDKWrapper&&);
+        UnitreeSDKWrapper(UnitreeSDKWrapper&&) noexcept;
+        UnitreeSDKWrapper& operator=(UnitreeSDKWrapper&&) noexcept;
 
         ~UnitreeSDKWrapper();
 
+        [[nodiscard]]
         rclcpp::Logger get_logger() const { return logger_; }
 
         bool initialize();
 
-        bool is_initialized() const {
-            return initialized_;
-        }
+        [[nodiscard]]
+        bool is_initialized() const { return initialized_; }
 
+        [[nodiscard]]
         std::pair<std::string, std::string> get_current_mode() const;
 
+        [[nodiscard]]
         bool has_active_mode() const;
 
     private:
-        // Mode creation
-        IdleMode create_idle_mode() const;
-
-        HighLevelMode create_high_level_mode() const;
-
-        LowLevelMode create_low_level_mode() const;
-
-        EmergencyStop create_emergency_stop_mode() const;
-
-        // Internal capabilities
+        // ========== Internal capabilities ==========
         bool release_mode();
 
         bool select_mode(const std::string& mode_name);
 
         bool damp();
 
-        bool emergency_stop();
+        // ========== High-level capabilities ==========
+        bool send_velocity_command_impl(const geometry_msgs::msg::Twist& message);
 
-        // High-level capabilities
-        bool send_velocity_command_impl(const geometry_msgs::msg::Twist& cmd);
+        bool send_speech_command_impl(const std::string& message);
 
-        // TODO: Add other high-level capabilities
+        // TODO: Figure out if any other high-level capabilities need to be added
 
-        // Low-level capabilities
-        // TODO: Add low-level capabilities
+        // ========== Low-level capabilities ==========
+        bool set_joint_motor_gains_impl();
 
-        // Friends
+        bool send_joint_control_command_impl();
+
+        // TODO: Figure out if any other low-level capabilities need to be added
+
+        // ========== Mode creation ==========
+        [[nodiscard]]
+        IdleMode create_idle_mode() const;
+
+        [[nodiscard]]
+        HighLevelMode create_high_level_mode() const;
+
+        [[nodiscard]]
+        LowLevelMode create_low_level_mode() const;
+
+        [[nodiscard]]
+        EmergencyMode create_emergency_mode() const;
+
+        // ========== Look mom, I have friends! ==========
         friend class IdleMode;
         friend class HighLevelMode;
         friend class LowLevelMode;
-        friend class EmergencyStop;
-
+        friend class EmergencyMode;
         template <typename From, typename To> friend struct Transition;
 
         std::string network_interface_;
         rclcpp::Logger logger_;
         bool initialized_;
 
-        MotionSwitcherClientPtr msc_;
-        LocoClientPtr loco_client_;
+        std::unique_ptr<unitree::robot::b2::MotionSwitcherClient> msc_;
+        std::unique_ptr<unitree::robot::g1::LocoClient> loco_client_;
     };
 
 } // namespace unitree_interface

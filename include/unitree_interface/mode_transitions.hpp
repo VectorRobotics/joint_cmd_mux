@@ -24,7 +24,7 @@ namespace unitree_interface {
     };
 
     template <>
-    struct Transition<std::monostate, EmergencyStop> {
+    struct Transition<std::monostate, EmergencyMode> {
         static constexpr bool allowed = true;
 
         static ControlMode execute(UnitreeSDKWrapper& sdk_wrapper);
@@ -46,7 +46,7 @@ namespace unitree_interface {
     };
 
     template <>
-    struct Transition<IdleMode, EmergencyStop> {
+    struct Transition<IdleMode, EmergencyMode> {
         static constexpr bool allowed = true;
 
         static ControlMode execute(UnitreeSDKWrapper& sdk_wrapper);
@@ -68,7 +68,7 @@ namespace unitree_interface {
     };
 
     template <>
-    struct Transition<HighLevelMode, EmergencyStop> {
+    struct Transition<HighLevelMode, EmergencyMode> {
         static constexpr bool allowed = true;
 
         static ControlMode execute(UnitreeSDKWrapper& sdk_wrapper);
@@ -90,7 +90,7 @@ namespace unitree_interface {
     };
 
     template <>
-    struct Transition<LowLevelMode, EmergencyStop> {
+    struct Transition<LowLevelMode, EmergencyMode> {
         static constexpr bool allowed = true;
 
         static ControlMode execute(UnitreeSDKWrapper& sdk_wrapper);
