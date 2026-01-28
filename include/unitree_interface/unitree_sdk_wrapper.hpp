@@ -34,9 +34,6 @@ namespace unitree_interface {
     using LowCmd = unitree_hg::msg::dds_::LowCmd_;
     using LowState = unitree_hg::msg::dds_::LowState_;
 
-    // ========== I swear it exists ==========
-    template <typename FromType, typename ToType> struct Transition;
-
     class UnitreeSDKWrapper {
     public:
         explicit UnitreeSDKWrapper(
@@ -110,9 +107,6 @@ namespace unitree_interface {
 
         // ========== Callbacks ==========
         void low_state_callback(const void* message);
-
-        // ========== Look mom, I have a friend! ==========
-        template <typename FromType, typename ToType> struct Transition;        
 
         // ========== Member variables ==========
         std::string network_interface_;

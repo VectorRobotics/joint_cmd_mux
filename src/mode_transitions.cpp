@@ -66,7 +66,7 @@ namespace unitree_interface {
         a situation wherein we transition from LowLevelMode to IdleMode and attempt to transition
         to EmergencyMode. No longer knowing whether the internal controller itself is in "high-level"
         or "low-level" mode, if we erroneously attempt to enter damping mode without high-level
-        control services active, we'll land up in some real shit.
+        control services active, we could possible land up in a dangerous situation.
         */
 
         if (!sdk_wrapper.has_active_mode()) {
