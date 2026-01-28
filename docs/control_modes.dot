@@ -6,7 +6,7 @@ digraph ControlModeFSM {
     Idle        [label="IdleMode"];
     High        [label="HighLevelMode"];
     Low         [label="LowLevelMode"];
-    Emergency   [label="EmergencyStop", shape=doublecircle];
+    Emergency   [label="EmergencyMode", shape=doublecircle];
 
     // monostate
     None -> Idle;
