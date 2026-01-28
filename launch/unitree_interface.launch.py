@@ -1,0 +1,41 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'network_interface',
+            default_value='eth0',
+            description='Network interface for Unitree SDK communication'
+        ),
+        DeclareLaunchArgument(
+            'motion_switcher_client_timeout',
+            default_value='5.0',
+            description='Timeout for MotionSwitcherClient (seconds)'
+        ),
+        DeclareLaunchArgument(
+            'loco_client_timeout',
+            default_value='10.0',
+            description='Timeout for LocoClient (seconds)'
+        ),
+        DeclareLaunchArgument(
+            'audio_client_timeout',
+            default_value='5.0',
+            description='Timeout for AudioClient (seconds)'
+        ),
+        Node(
+            package='unitree_interface',
+            executable='unitree_interface_node',
+            name='unitree_interface',
+            output='screen',
+            parameters=[{
+                'network_interface': LaunchConfiguration('network_interface'),
+                'motion_switcher_client_timeout': LaunchConfiguration('motion_switcher_client_timeout'),
+                'loco_client_timeout': LaunchConfiguration('loco_client_timeout'),
+                'audio_client_timeout': LaunchConfiguration('audio_client_timeout'),
+            }],
+        ),
+    ])
