@@ -193,7 +193,7 @@ namespace unitree_interface {
     // ========== Callbacks ==========
     void UnitreeInterface::handle_mode_change_request(
         const srv::ChangeControlMode::Request::SharedPtr request, // NOLINT
-        srv::ChangeControlMode::Response::SharedPtr response
+        srv::ChangeControlMode::Response::SharedPtr response // NOLINT
     ) {
         const std::uint8_t requested_mode = request->requested_mode;
 

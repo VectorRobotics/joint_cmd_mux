@@ -91,21 +91,41 @@ install(DIRECTORY launch
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 
-  # Test control_modes
-  ament_add_gtest(test_control_modes
-    test/test_control_modes.cpp
+  # ========== Unit tests ==========
+  # Test control modes
+  ament_add_gtest(test_control_modes_unit
+    test/unit/test_control_modes.cpp
   )
 
-  target_link_libraries(test_control_modes
+  target_link_libraries(test_control_modes_unit
     unitree_interface_lib
   )
 
-  # Test unitree_interface
-  ament_add_gtest(test_unitree_interface
-    test/test_unitree_interface.cpp
+  # Test mode transitions
+  ament_add_gtest(test_mode_transitions_unit
+    test/unit/test_mode_transitions.cpp
   )
 
-  target_link_libraries(test_unitree_interface
+  target_link_libraries(test_mode_transitions_unit
+    unitree_interface_lib
+  )
+
+  # ========== Integration tests ==========
+  # Test mode transitions
+  ament_add_gtest(test_mode_transitions_integration
+    test/integration/test_mode_transitions.cpp
+  )
+
+  target_link_libraries(test_mode_transitions_integration
+    unitree_interface_lib
+  )
+
+  # Test the unitree interface
+  ament_add_gtest(test_unitree_interface_integration
+    test/integration/test_unitree_interface.cpp
+  )
+
+  target_link_libraries(test_unitree_interface_integration
     unitree_interface_lib
   )
 endif()
