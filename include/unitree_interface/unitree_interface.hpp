@@ -67,6 +67,8 @@ namespace unitree_interface {
         std::string joint_commands_topic_;
         std::string estop_topic_;
 
+        std::uint8_t volume_;
+
         rclcpp::Service<srv::ChangeControlMode>::SharedPtr mode_change_service_;
 
         rclcpp::Publisher<msg::ControlMode>::SharedPtr current_mode_pub_;

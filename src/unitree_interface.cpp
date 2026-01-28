@@ -4,7 +4,6 @@
 #include "unitree_interface/mode_transitions.hpp"
 #include "unitree_interface/unitree_sdk_wrapper.hpp"
 
-#include <cstdint>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/qos.hpp>
 
@@ -23,6 +22,7 @@ namespace unitree_interface {
         declare_parameter("motion_switcher_client_timeout", 5.0F); // NOLINT
         declare_parameter("loco_client_timeout", 10.0F); // NOLINT
         declare_parameter("audio_client_timeout", 5.0F); // NOLINT
+        declare_parameter("volume", 100); // NOLINT
 
         declare_parameter("mode_change_service_name", "~/change_mode");
         declare_parameter("current_mode_topic", "~/current_mode");
@@ -38,8 +38,7 @@ namespace unitree_interface {
         tts_topic_ = get_parameter("tts_topic").as_string();
         joint_commands_topic_ = get_parameter("joint_commands_topic").as_string();
         estop_topic_ = get_parameter("estop_topic").as_string();
-
-        publish_current_mode();
+        volume_ = static_cast<std::uint8_t>(get_parameter("volume").as_int());
     }
 
     // ========== Initialization ==========
@@ -76,6 +75,8 @@ namespace unitree_interface {
             RCLCPP_ERROR(logger_, "Failed to initialize SDK wrapper");
             throw std::runtime_error("Unitree SDK initialization failed");
         }
+
+        sdk_wrapper_->set_volume(volume_);
 
         initialize_services();
         initialize_publishers();
@@ -125,13 +126,20 @@ namespace unitree_interface {
                 estop_callback();
             }
         );
+
+        tts_sub_ = create_subscription<std_msgs::msg::String>(
+            tts_topic_,
+            rclcpp::QoS(10), // NOLINT
+            [this](const std_msgs::msg::String::SharedPtr message) { // NOLINT
+                tts_callback(message);
+            }
+        );
     }
 
     void UnitreeInterface::setup_mode_dependent_subscriptions() {
         // Reset all subscriptions
         // NOTE: Do not reset estop_sub_ if you value your life
         cmd_vel_sub_.reset();
-        tts_sub_.reset();
         // TODO: Reset hybrid mode subscriptions
         joint_commands_sub_.reset();
 
@@ -156,14 +164,6 @@ namespace unitree_interface {
                         rclcpp::QoS(10), // NOLINT
                         [this](const geometry_msgs::msg::Twist::SharedPtr message) { // NOLINT
                             cmd_vel_callback(message);
-                        }
-                    );
-
-                    tts_sub_ = create_subscription<std_msgs::msg::String>(
-                        tts_topic_,
-                        rclcpp::QoS(10), // NOLINT
-                        [this](const std_msgs::msg::String::SharedPtr message) { // NOLINT
-                            tts_callback(message);
                         }
                     );
 

@@ -26,6 +26,11 @@ def generate_launch_description():
             default_value='5.0',
             description='Timeout for AudioClient (seconds)'
         ),
+        DeclareLaunchArgument(
+            'volume',
+            default_value='100',
+            description='Volume for the speaker'
+        ),
         Node(
             package='unitree_interface',
             executable='unitree_interface_node',
@@ -36,6 +41,7 @@ def generate_launch_description():
                 'motion_switcher_client_timeout': LaunchConfiguration('motion_switcher_client_timeout'),
                 'loco_client_timeout': LaunchConfiguration('loco_client_timeout'),
                 'audio_client_timeout': LaunchConfiguration('audio_client_timeout'),
+                'volume': LaunchConfiguration('volume'),
             }],
         ),
     ])

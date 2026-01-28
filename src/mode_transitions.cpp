@@ -47,7 +47,7 @@ namespace unitree_interface {
     ControlMode Transition<IdleMode, HighLevelMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
         // TODO: Check if the mode string here is appropriate for the version of the Motion
         // Control Service we're running with
-        if (sdk_wrapper.has_active_mode() || sdk_wrapper.select_mode("mcf")) {
+        if (sdk_wrapper.has_active_mode() || sdk_wrapper.select_mode("ai")) {
             return HighLevelMode{};
         }
 
@@ -124,7 +124,7 @@ namespace unitree_interface {
     ControlMode Transition<LowLevelMode, HighLevelMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
         // TODO: Check if the mode string here is appropriate for the version of the Motion
         // Control Service we're running with
-        if (sdk_wrapper.has_active_mode() || sdk_wrapper.select_mode("mcf")) {
+        if (sdk_wrapper.has_active_mode() || sdk_wrapper.select_mode("ai")) {
             return HighLevelMode{};
         }
 
