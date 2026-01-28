@@ -1,54 +1,67 @@
 #ifndef VECTOR_UNITREE_SDK_WRAPPER_HPP
 #define VECTOR_UNITREE_SDK_WRAPPER_HPP
 
-#include <rclcpp/node.hpp>
-#include <rclcpp/logging.hpp>
+#include "unitree_interface/msg/joint_commands.hpp"
 
-#include <geometry_msgs/msg/twist.hpp>
+#include <unitree/robot/channel/channel_publisher.hpp>
+#include <unitree/robot/channel/channel_subscriber.hpp>
+#include <unitree/idl/hg/LowCmd_.hpp>
+#include <unitree/idl/hg/LowState_.hpp>
+
+#include <rclcpp/node.hpp>
 
 #include <memory>
 #include <string>
+#include <array>
 
 // ========== Forward declarations ==========
+namespace rclcpp {
+    class Logger;
+}
+
 namespace unitree::robot::b2 {
     class MotionSwitcherClient;
 }
 
 namespace unitree::robot::g1 {
     class LocoClient;
+    class AudioClient;
 }
 
 namespace unitree_interface {
 
-    // ========== I swear they exist ==========
-    class IdleMode;
-    class HighLevelMode;
-    class LowLevelMode;
-    class EmergencyMode;
-    template <typename From, typename To> struct Transition;
+    // ========== Aliases ==========
+    using LowCmd = unitree_hg::msg::dds_::LowCmd_;
+    using LowState = unitree_hg::msg::dds_::LowState_;
+
+    // ========== I swear it exists ==========
+    template <typename FromType, typename ToType> struct Transition;
 
     class UnitreeSDKWrapper {
     public:
         explicit UnitreeSDKWrapper(
-            const rclcpp::Node::SharedPtr& node,
             std::string network_interface,
-            rclcpp::Logger logger = rclcpp::get_logger("unitree_interface")
+            rclcpp::Logger logger
         );
 
         // Can't copy
         UnitreeSDKWrapper(const UnitreeSDKWrapper&) = delete;
         UnitreeSDKWrapper& operator=(const UnitreeSDKWrapper&) = delete;
 
-        // Can move
-        UnitreeSDKWrapper(UnitreeSDKWrapper&&) noexcept;
-        UnitreeSDKWrapper& operator=(UnitreeSDKWrapper&&) noexcept;
+        // Can't move
+        UnitreeSDKWrapper(UnitreeSDKWrapper&&) = delete;
+        UnitreeSDKWrapper& operator=(UnitreeSDKWrapper&&) = delete;
 
         ~UnitreeSDKWrapper();
 
         [[nodiscard]]
         rclcpp::Logger get_logger() const { return logger_; }
 
-        bool initialize();
+        bool initialize(
+            float msc_timeout,
+            float loco_client_timeout,
+            float audio_client_timeout
+        );
 
         [[nodiscard]]
         bool is_initialized() const { return initialized_; }
@@ -59,54 +72,72 @@ namespace unitree_interface {
         [[nodiscard]]
         bool has_active_mode() const;
 
-    private:
-        // ========== Internal capabilities ==========
+        [[nodiscard]]
+        const LowState& get_low_state() const;
+
+        // ========== General capabilities ==========
         bool release_mode();
 
         bool select_mode(const std::string& mode_name);
 
+        // ========== High-level capabilities ==========
+        bool send_velocity_command(
+            float vx,
+            float vy,
+            float vyaw
+        );
+
         bool damp();
 
-        // ========== High-level capabilities ==========
-        bool send_velocity_command_impl(const geometry_msgs::msg::Twist& message);
-
-        bool send_speech_command_impl(const std::string& message);
-
-        // TODO: Figure out if any other high-level capabilities need to be added
-
         // ========== Low-level capabilities ==========
-        bool set_joint_motor_gains_impl();
+        void send_joint_commands(
+            const msg::JointCommands& message
+        );
 
-        bool send_joint_control_command_impl();
+        // ========== Audio capabilities ==========
+        bool set_volume(std::uint8_t volume);
 
-        // TODO: Figure out if any other low-level capabilities need to be added
+        bool send_speech_command(const std::string& message);
 
-        // ========== Mode creation ==========
-        [[nodiscard]]
-        IdleMode create_idle_mode() const;
+    private:
+        void initialize_clients(
+            float msc_timeout,
+            float loco_client_timeout,
+            float audio_client_timeout
+        );
 
-        [[nodiscard]]
-        HighLevelMode create_high_level_mode() const;
+        void initialize_low_level_machinery();
 
-        [[nodiscard]]
-        LowLevelMode create_low_level_mode() const;
+        // ========== Callbacks ==========
+        void low_state_callback(const void* message);
 
-        [[nodiscard]]
-        EmergencyMode create_emergency_mode() const;
+        // ========== Look mom, I have a friend! ==========
+        template <typename FromType, typename ToType> struct Transition;        
 
-        // ========== Look mom, I have friends! ==========
-        friend class IdleMode;
-        friend class HighLevelMode;
-        friend class LowLevelMode;
-        friend class EmergencyMode;
-        template <typename From, typename To> friend struct Transition;
-
+        // ========== Member variables ==========
         std::string network_interface_;
         rclcpp::Logger logger_;
-        bool initialized_;
+        bool initialized_{false};
 
+        // ========== Clients ==========
         std::unique_ptr<unitree::robot::b2::MotionSwitcherClient> msc_;
         std::unique_ptr<unitree::robot::g1::LocoClient> loco_client_;
+        std::unique_ptr<unitree::robot::g1::AudioClient> audio_client_;
+
+        // ========== Low-level stuff ==========
+        // const std::string arm_cmd_topic_{"rt/arm_sdk"};
+        const std::string low_cmd_topic_{"rt/lowcmd"};
+        const std::string low_state_topic_{"rt/lowstate"};
+        // const std::string torso_imu_topic_{"rt/secondary_imu"};
+
+        const std::uint8_t mode_pr_{0}; // Always use PR mode (command joint angles)
+        const std::uint8_t mode_machine_{2}; // 29 DoF Unitree G1
+
+        LowState low_state_;
+        std::mutex low_state_mutex_;
+
+        unitree::robot::ChannelPublisherPtr<LowCmd> low_cmd_pub_;
+        unitree::robot::ChannelSubscriberPtr<LowState> low_state_sub_;
     };
 
 } // namespace unitree_interface

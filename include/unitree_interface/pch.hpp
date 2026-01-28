@@ -5,6 +5,7 @@
 #include <variant>
 #include <memory>
 #include <utility>
+#include <string>
 
 // ROS 2 core header
 #include <rclcpp/rclcpp.hpp>

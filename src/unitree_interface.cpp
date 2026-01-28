@@ -1,16 +1,285 @@
 #include "unitree_interface/unitree_interface.hpp"
 
+#include "unitree_interface/control_modes.hpp"
 #include "unitree_interface/mode_transitions.hpp"
+#include "unitree_interface/unitree_sdk_wrapper.hpp"
+
+#include <cstdint>
+#include <rclcpp/logging.hpp>
+#include <rclcpp/qos.hpp>
+
+#include <stdexcept>
+#include <type_traits>
+#include <variant>
 
 namespace unitree_interface {
 
     UnitreeInterface::UnitreeInterface(const rclcpp::NodeOptions& options)
         : Node("unitree_interface", options),
-          sdk_wrapper_(shared_from_this(), "eth0", get_logger()),
+          logger_(get_logger()),
           current_mode_(std::monostate{}) {
-        sdk_wrapper_.initialize();
+        // ========== Parameters ==========
+        declare_parameter("network_interface", "eth0");
+        declare_parameter("motion_switcher_client_timeout", 5.0F); // NOLINT
+        declare_parameter("loco_client_timeout", 10.0F); // NOLINT
+        declare_parameter("audio_client_timeout", 5.0F); // NOLINT
 
-        current_mode_ = Transition<std::monostate, IdleMode>::execute(sdk_wrapper_);
-    }   
+        declare_parameter("mode_change_service_name", "~/change_mode");
+        declare_parameter("current_mode_topic", "~/current_mode");
+        declare_parameter("cmd_vel_topic", "~/cmd_vel");
+        declare_parameter("tts_topic", "~/tts");
+        declare_parameter("joint_commands_topic", "~/joint_commands");
+        declare_parameter("estop_topic", "/estop"); // TODO: namespace this?
+
+        // ========== Grab parameters ==========
+        mode_change_service_name_ = get_parameter("mode_change_service_name").as_string();
+        current_mode_topic_ = get_parameter("current_mode_topic").as_string();
+        cmd_vel_topic_ = get_parameter("cmd_vel_topic").as_string();
+        tts_topic_ = get_parameter("tts_topic").as_string();
+        joint_commands_topic_ = get_parameter("joint_commands_topic").as_string();
+        estop_topic_ = get_parameter("estop_topic").as_string();
+
+        publish_current_mode();
+    }
+
+    // ========== Initialization ==========
+    void UnitreeInterface::initialize() {
+        if (sdk_wrapper_) {
+            RCLCPP_INFO(logger_, "UnitreeInterface already intialized");
+            return;
+        }
+
+        const std::string interface_name = get_parameter("network_interface").as_string();
+        const float msc_timeout = static_cast<float>(
+            get_parameter("motion_switcher_client_timeout").as_double()
+        );
+        const float loco_client_timeout = static_cast<float>(
+            get_parameter("loco_client_timeout").as_double()
+        );
+        const float audio_client_timeout = static_cast<float>(
+            get_parameter("audio_client_timeout").as_double()
+        );
+
+        sdk_wrapper_ = std::make_unique<UnitreeSDKWrapper>(
+            interface_name,
+            logger_
+        );
+        // At this point, sdk_wrapper_ is guaranteed to not be a nullptr
+
+        if (!sdk_wrapper_->initialize(msc_timeout, loco_client_timeout, audio_client_timeout)) {
+            /*
+            sdk_wrapper_.initialize() might be able to throw, if the SDK's init
+            methods themselves can throw. Unfortunately, we don't know if that's
+            the case here. It most likely isn't, since the sdk seems to use errors
+            as returns.
+            */
+            RCLCPP_ERROR(logger_, "Failed to initialize SDK wrapper");
+            throw std::runtime_error("Unitree SDK initialization failed");
+        }
+
+        initialize_services();
+        initialize_publishers();
+        create_subscriptions();
+
+        current_mode_ = Transition<std::monostate, IdleMode>::execute(*sdk_wrapper_);
+        RCLCPP_INFO(
+            logger_,
+            "Initialized to %s",
+            ControlModeTraits<IdleMode>::name()
+        );
+
+        setup_mode_dependent_subscriptions();
+        publish_current_mode();
+    }
+
+    void UnitreeInterface::initialize_services() {
+        mode_change_service_ = create_service<srv::ChangeControlMode>(
+            mode_change_service_name_,
+            [this](
+                const srv::ChangeControlMode::Request::SharedPtr request, // NOLINT
+                srv::ChangeControlMode::Response::SharedPtr response
+            ) {
+                handle_mode_change_request(request, response); // NOLINT
+            }
+        );
+        RCLCPP_INFO(logger_, "Mode change service created");
+    }
+
+    void UnitreeInterface::initialize_publishers() {
+        auto qos = rclcpp::QoS(rclcpp::KeepLast(1))
+                        .transient_local()
+                        .reliable();
+
+        current_mode_pub_ = create_publisher<msg::ControlMode>(
+            current_mode_topic_,
+            qos
+        );
+        RCLCPP_INFO(logger_, "Publishers created");
+    }
+
+    void UnitreeInterface::create_subscriptions() {
+        estop_sub_ = create_subscription<std_msgs::msg::Empty>(
+            estop_topic_,
+            rclcpp::QoS(1),
+            [this](const std_msgs::msg::Empty::SharedPtr) { // NOLINT
+                estop_callback();
+            }
+        );
+    }
+
+    void UnitreeInterface::setup_mode_dependent_subscriptions() {
+        // Reset all subscriptions
+        // NOTE: Do not reset estop_sub_ if you value your life
+        cmd_vel_sub_.reset();
+        tts_sub_.reset();
+        // TODO: Reset hybrid mode subscriptions
+        joint_commands_sub_.reset();
+
+        // Create subscriptions based on current mode
+        std::visit(
+            [this](auto&& mode){
+                using ModeType = std::decay_t<decltype(mode)>;
+
+                if constexpr (
+                    std::is_same_v<ModeType, std::monostate> ||
+                    std::is_same_v<ModeType, IdleMode> ||
+                    std::is_same_v<ModeType, EmergencyMode>
+                ) {
+                    RCLCPP_INFO(
+                        logger_,
+                        "%s: No subscriptions created",
+                        ControlModeTraits<ModeType>::name()
+                    );
+                } else if constexpr (std::is_same_v<ModeType, HighLevelMode>) {
+                    cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+                        cmd_vel_topic_,
+                        rclcpp::QoS(10), // NOLINT
+                        [this](const geometry_msgs::msg::Twist::SharedPtr message) { // NOLINT
+                            cmd_vel_callback(message);
+                        }
+                    );
+
+                    tts_sub_ = create_subscription<std_msgs::msg::String>(
+                        tts_topic_,
+                        rclcpp::QoS(10), // NOLINT
+                        [this](const std_msgs::msg::String::SharedPtr message) { // NOLINT
+                            tts_callback(message);
+                        }
+                    );
+
+                    RCLCPP_INFO(
+                        logger_,
+                        "%s: subscriptions created",
+                        ControlModeTraits<HighLevelMode>::name()
+                    );
+                // TODO: Add this when hybrid mode is ready
+                // } else if constexpr (std::is_same_v<ModeType, HybridMode>) {
+                } else if constexpr (std::is_same_v<ModeType, LowLevelMode>) {
+                    joint_commands_sub_ = create_subscription<msg::JointCommands>(
+                        joint_commands_topic_,
+                        rclcpp::QoS(10), // NOLINT
+                        [this](const msg::JointCommands::SharedPtr message) { // NOLINT
+                            joint_commands_callback(message);
+                        }
+                    );
+                } else {
+                    static_assert(always_false<ModeType>::value, "Illegal mode");
+                }
+            },
+            current_mode_
+        );
+    }
+
+    // ========== Callbacks ==========
+    void UnitreeInterface::handle_mode_change_request(
+        const srv::ChangeControlMode::Request::SharedPtr request, // NOLINT
+        srv::ChangeControlMode::Response::SharedPtr response
+    ) {
+        const std::uint8_t requested_mode = request->requested_mode;
+
+        RCLCPP_INFO(logger_, "Mode change request: %d", requested_mode);
+
+        auto [new_mode, success] = try_transition_to(
+            current_mode_,
+            requested_mode,
+            *sdk_wrapper_
+        );
+
+        current_mode_ = new_mode;
+
+        setup_mode_dependent_subscriptions();
+        publish_current_mode();
+
+        response->success = success;
+        response->message = success ? "Mode transition successful" : "Mode transition failed";
+
+        if (success) {
+            RCLCPP_INFO(logger_, "Mode transition successful");
+        }
+    }
+
+    void UnitreeInterface::cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr message) { // NOLINT
+        if (std::holds_alternative<HighLevelMode>(current_mode_)) {
+            const auto vx = static_cast<float>(message->linear.x); // m/s
+            const auto vy = static_cast<float>(message->linear.y); // m/s
+            const auto vyaw = static_cast<float>(message->angular.z); // rad/s
+
+            sdk_wrapper_->send_velocity_command(vx, vy, vyaw);
+        } else {
+            RCLCPP_WARN_THROTTLE(
+                logger_,
+                *get_clock(),
+                1000,
+                "Received cmd_vel but not in HighLevelMode"
+            );
+        }
+    }
+
+    // TODO: Add hybrid mode callbacks
+
+    void UnitreeInterface::joint_commands_callback(const msg::JointCommands::SharedPtr message) { // NOLINT
+        if (std::holds_alternative<LowLevelMode>(current_mode_)) {
+            // TODO: Check if joint indices are repeated
+            // TODO: Check if joint indices are invalid
+            // TODO: Check command limits
+            sdk_wrapper_->send_joint_commands(*message);
+        } else {
+            RCLCPP_WARN_THROTTLE(
+                logger_,
+                *get_clock(),
+                1000,
+                "Received joint command but not in LowLevelMode"
+            );
+        }
+    }
+
+    void UnitreeInterface::estop_callback() {
+        auto [new_mode, _] = try_transition<EmergencyMode>(current_mode_, *sdk_wrapper_);
+
+        current_mode_ = new_mode;
+
+        setup_mode_dependent_subscriptions();
+        publish_current_mode();
+    }
+
+    void UnitreeInterface::tts_callback(const std_msgs::msg::String::SharedPtr message) { // NOLINT
+        sdk_wrapper_->send_speech_command(message->data);
+    }
+
+    // ========== Publish methods ==========
+    void UnitreeInterface::publish_current_mode() {
+        msg::ControlMode message;
+
+        message.current_mode = std::visit(
+            [](const auto& mode) {
+                using ModeType = std::decay_t<decltype(mode)>;
+
+                return ControlModeTraits<ModeType>::id;
+            },
+            current_mode_
+        );
+
+        current_mode_pub_->publish(message);
+    }
 
 } // namespace unitree_interface

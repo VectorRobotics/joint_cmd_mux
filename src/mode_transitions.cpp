@@ -2,6 +2,7 @@
 
 #include "unitree_interface/control_modes.hpp"
 #include "unitree_interface/unitree_sdk_wrapper.hpp"
+#include <variant>
 
 namespace unitree_interface {
 
@@ -17,8 +18,8 @@ namespace unitree_interface {
     */
 
     // ========== std::monostate ==========
-    ControlMode Transition<std::monostate, IdleMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
-        return sdk_wrapper.create_idle_mode();
+    ControlMode Transition<std::monostate, IdleMode>::execute(UnitreeSDKWrapper& _) {
+        return IdleMode{};
     }
 
     ControlMode Transition<std::monostate, EmergencyMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
@@ -28,11 +29,16 @@ namespace unitree_interface {
         the emergency stop procedure.
         */
 
-        auto emergency_mode = sdk_wrapper.create_emergency_mode();
-
-        if (emergency_mode.damp(sdk_wrapper)) {
-            return emergency_mode;
+        if (sdk_wrapper.damp()) {
+            return EmergencyMode{};
         }
+
+        RCLCPP_ERROR(
+            sdk_wrapper.get_logger(),
+            "Call to damp failed during %s to Emergency transition. "
+            "The system will be left in emergency mode. Repeated calls to damp(estop) may be required",
+            ControlModeTraits<std::monostate>::name()
+        );
 
         return std::monostate{};
     }
@@ -42,18 +48,18 @@ namespace unitree_interface {
         // TODO: Check if the mode string here is appropriate for the version of the Motion
         // Control Service we're running with
         if (sdk_wrapper.has_active_mode() || sdk_wrapper.select_mode("mcf")) {
-            return sdk_wrapper.create_high_level_mode();
+            return HighLevelMode{};
         }
 
-        return sdk_wrapper.create_idle_mode();
+        return IdleMode{};
     }
 
     ControlMode Transition<IdleMode, LowLevelMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
         if (!sdk_wrapper.has_active_mode() || sdk_wrapper.release_mode()) {
-            return sdk_wrapper.create_low_level_mode();
+            return LowLevelMode{};
         }
 
-        return sdk_wrapper.create_idle_mode();
+        return IdleMode{};
     }
 
     ControlMode Transition<IdleMode, EmergencyMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
@@ -70,87 +76,113 @@ namespace unitree_interface {
             auto possible_high_level_mode = Transition<IdleMode, HighLevelMode>::execute(sdk_wrapper);
 
             if (!std::holds_alternative<HighLevelMode>(possible_high_level_mode)) {
-                return sdk_wrapper.create_idle_mode();
+                return IdleMode{};
             }
         }
 
-        auto emergency_mode = sdk_wrapper.create_emergency_mode();
-
-        if (!emergency_mode.damp(sdk_wrapper)) {
-            return sdk_wrapper.create_idle_mode();
+        // At this point, we should have high-level services active
+        if (!sdk_wrapper.damp()) {
+            return IdleMode{};
         }
 
-        return emergency_mode;
+        RCLCPP_ERROR(
+            sdk_wrapper.get_logger(),
+            "Call to damp failed during %s to Emergency transition. "
+            "The system will be left in emergency mode. Repeated calls to damp(estop) may be required",
+            ControlModeTraits<IdleMode>::name()
+        );
+
+        return EmergencyMode{};
     }
 
     // ========== HighLevelMode ==========
-    ControlMode Transition<HighLevelMode, IdleMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
-        return sdk_wrapper.create_idle_mode();
+    ControlMode Transition<HighLevelMode, IdleMode>::execute(UnitreeSDKWrapper& _) {
+        return IdleMode{};
     }
 
     ControlMode Transition<HighLevelMode, LowLevelMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
         if (!sdk_wrapper.has_active_mode() || sdk_wrapper.release_mode()) {
-            return sdk_wrapper.create_low_level_mode();
+            return LowLevelMode{};
         }
 
-        return sdk_wrapper.create_high_level_mode();
+        return HighLevelMode{};
     }
 
     ControlMode Transition<HighLevelMode, EmergencyMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
-        auto emergency_mode = sdk_wrapper.create_emergency_mode();
-
-        if (emergency_mode.damp(sdk_wrapper)) {
-            return emergency_mode;
+        if (sdk_wrapper.damp()) {
+            return EmergencyMode{};
         }
 
-        return sdk_wrapper.create_high_level_mode();
+        return HighLevelMode{};
     }
 
     // ========== LowLevelMode ==========
-    ControlMode Transition<LowLevelMode, IdleMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
-        return sdk_wrapper.create_idle_mode();
+    ControlMode Transition<LowLevelMode, IdleMode>::execute(UnitreeSDKWrapper& _) {
+        return IdleMode{};
     }
 
     ControlMode Transition<LowLevelMode, HighLevelMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
         // TODO: Check if the mode string here is appropriate for the version of the Motion
         // Control Service we're running with
         if (sdk_wrapper.has_active_mode() || sdk_wrapper.select_mode("mcf")) {
-            return sdk_wrapper.create_high_level_mode();
+            return HighLevelMode{};
         }
 
-        return sdk_wrapper.create_low_level_mode();
+        return LowLevelMode{};
     }
 
     ControlMode Transition<LowLevelMode, EmergencyMode>::execute(UnitreeSDKWrapper& sdk_wrapper) {
         auto possible_high_level_mode = Transition<LowLevelMode, HighLevelMode>::execute(sdk_wrapper);
 
         if (!std::holds_alternative<HighLevelMode>(possible_high_level_mode)) {
-            return sdk_wrapper.create_low_level_mode();
+            return LowLevelMode{};
         }
 
-        auto emergency_mode = sdk_wrapper.create_emergency_mode();
-
-        if (emergency_mode.damp(sdk_wrapper)) {
-            return emergency_mode;
+        if (sdk_wrapper.damp()) {
+            return EmergencyMode{};
         }
 
         // The internal controller should be high-level at this point, so we need to rollback to low-level
         auto possible_low_level_mode = Transition<HighLevelMode, LowLevelMode>::execute(sdk_wrapper);
 
         if (std::holds_alternative<LowLevelMode>(possible_low_level_mode)) {
-            return possible_low_level_mode;
+            return EmergencyMode{};
         }
 
         // damp() failed, and we also failed to transition back to low-level
         RCLCPP_ERROR(
             sdk_wrapper.get_logger(),
-            "Call to damp failed during %s to %s transition. "
+            "Call to damp failed during %s to Emergency transition. "
             "The system will be left in emergency mode. Repeated calls to damp(estop) may be required",
-            ControlModeTraits<LowLevelMode>::name(),
-            ControlModeTraits<EmergencyMode>::name()
+            ControlModeTraits<LowLevelMode>::name()
         );
 
-        return emergency_mode;
+        return EmergencyMode{};
+    }
+
+    // ========== Helper functions ==========
+    TransitionResult try_transition_to(
+        const ControlMode& from,
+        const std::uint8_t to_id,
+        UnitreeSDKWrapper& sdk_wrapper
+    ) {
+        switch (to_id) {
+            case ControlModeTraits<IdleMode>::id:
+                return try_transition<IdleMode>(from, sdk_wrapper);
+                break;
+            case ControlModeTraits<HighLevelMode>::id:
+                return try_transition<HighLevelMode>(from, sdk_wrapper);
+                break;
+            // TODO: Enable this when HybridMode is ready
+            // case ControlModeTraits<HybridMode>::id:
+            //     return try_transition<HybridMode>(from, sdk_wrapper);
+            //     break;
+            case ControlModeTraits<LowLevelMode>::id:
+                return try_transition<LowLevelMode>(from, sdk_wrapper);
+                break;
+            default:
+                return {from, false};
+        }
     }
 
 } // namespace unitree_interface

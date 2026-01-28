@@ -19,6 +19,7 @@ add_subdirectory(third_party/unitree_sdk2)
 
 # Generate interface definitions
 set(msg_files
+  "interfaces/msg/ControlMode.msg"
   "interfaces/msg/JointCommand.msg"
   "interfaces/msg/JointCommands.msg"
 )
@@ -44,7 +45,6 @@ rosidl_get_typesupport_target(typesupport_target
 add_library(unitree_interface_lib
   STATIC
     src/unitree_interface.cpp
-    src/control_modes.cpp
     src/unitree_sdk_wrapper.cpp
     src/mode_transitions.cpp
 )
@@ -69,12 +69,6 @@ target_link_libraries(unitree_interface_lib
 ament_target_dependencies(unitree_interface_lib
   rclcpp
   geometry_msgs
-)
-
-# A good idea (at least, during development)
-target_compile_options(unitree_interface_lib
-  PRIVATE
-    -Werror
 )
 
 # Create the executable
