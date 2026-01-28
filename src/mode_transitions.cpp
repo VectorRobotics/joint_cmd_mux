@@ -29,18 +29,18 @@ namespace unitree_interface {
         the emergency stop procedure.
         */
 
-        if (sdk_wrapper.damp()) {
-            return EmergencyMode{};
+        const bool damp_success = sdk_wrapper.damp();
+
+        if (!damp_success) {
+            RCLCPP_ERROR(
+                sdk_wrapper.get_logger(),
+                "Call to damp failed during %s to Emergency transition. "
+                "The system will be left in emergency mode. Repeated calls to damp(estop) may be required",
+                ControlModeTraits<std::monostate>::name()
+            );
         }
 
-        RCLCPP_ERROR(
-            sdk_wrapper.get_logger(),
-            "Call to damp failed during %s to Emergency transition. "
-            "The system will be left in emergency mode. Repeated calls to damp(estop) may be required",
-            ControlModeTraits<std::monostate>::name()
-        );
-
-        return std::monostate{};
+        return EmergencyMode{};
     }
 
     // ========== IdleMode ==========
